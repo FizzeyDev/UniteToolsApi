@@ -1,4 +1,4 @@
-javascriptconst ALLOWED_ORIGINS = [
+const ALLOWED_ORIGINS = [
   'https://unite-tools.com',
   'http://127.0.0.1:5500',
   'http://localhost:5500'
@@ -6,11 +6,11 @@ javascriptconst ALLOWED_ORIGINS = [
 
 export default async function handler(req, res) {
   const origin = req.headers.origin;
-  if (ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
+
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).end();
