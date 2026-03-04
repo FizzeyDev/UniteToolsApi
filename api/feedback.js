@@ -15,33 +15,30 @@ export const config = {
 const REPO = 'FizzeyDev/UniteTools';
 
 /**
- * Upload une image base64 sur Imgur (anonyme).
- * Retourne l'URL directe publique, ou null en cas d'échec.
+ * Upload une image base64 sur Cloudinary (upload non signé).
+ * Retourne l'URL publique, ou null en cas d'échec.
  */
-async function uploadToImgur(dataUrl, filename) {
-  // Extraire uniquement le base64 sans le préfixe data:...;base64,
-  const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+async function uploadToCloudinary(dataUrl) {
+  const cloudName   = process.env.CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET;
 
-  const res = await fetch('https://api.imgur.com/3/image', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Client-ID ${process.env.IMGUR_CLIENT_ID}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      image: base64,
-      type: 'base64',
-      name: filename,
-    }),
-  });
+  const formData = new FormData();
+  formData.append('file', dataUrl);           // Cloudinary accepte directement le data URL
+  formData.append('upload_preset', uploadPreset);
+  formData.append('folder', 'unite-tools-feedback');
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+    { method: 'POST', body: formData }
+  );
 
   if (!res.ok) {
-    console.error('Imgur upload failed:', res.status, await res.text());
+    console.error('Cloudinary upload failed:', res.status, await res.text());
     return null;
   }
 
   const data = await res.json();
-  return data.data?.link ?? null; // ex: https://i.imgur.com/abc123.jpg
+  return data.secure_url ?? null; // ex: https://res.cloudinary.com/dxxx/image/upload/...
 }
 
 export default async function handler(req, res) {
@@ -57,15 +54,12 @@ export default async function handler(req, res) {
   const { title, body, labels, images } = req.body;
   if (!title || !body) return res.status(400).json({ error: 'Champs manquants' });
 
-  // 1. Uploader les images sur Imgur pour obtenir des URLs publiques
+  // 1. Uploader les images sur Cloudinary
   let imagesMarkdown = '';
 
   if (Array.isArray(images) && images.length > 0) {
-    const uploaded = await Promise.all(
-      images.map(({ name, dataUrl }) => uploadToImgur(dataUrl, name))
-    );
-
-    const validUrls = uploaded.filter(Boolean);
+    const urls = await Promise.all(images.map(({ dataUrl }) => uploadToCloudinary(dataUrl)));
+    const validUrls = urls.filter(Boolean);
 
     if (validUrls.length > 0) {
       const lines = validUrls.map((url, i) => `![screenshot-${i + 1}](${url})`).join('\n\n');
@@ -73,7 +67,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // 2. Créer l'issue GitHub avec les images déjà intégrées
+  // 2. Créer l'issue GitHub avec les images intégrées
   const finalBody = `${body}${imagesMarkdown}`;
 
   const response = await fetch(`https://api.github.com/repos/${REPO}/issues`, {
